@@ -134,6 +134,13 @@ footer{margin-top:50px;padding-top:20px;border-top:1px solid var(--border);font-
   <div class="card" style="margin-top:16px"><h4>Meta vs Google · Leads y CPL <span class="muted">· evento común (Google: Oportunidad = Lead/Registro)</span></h4><div class="chartbox"><canvas id="chartMvG"></canvas></div></div>
   <div class="card" style="margin-top:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+      <h4 style="margin:0">Coste por evento · semana a semana · Meta vs Google <span class="muted">· ¿sube o baja?</span></h4>
+      <div class="chips" id="costMetric"><span class="chip on" data-m="cpl">CPL / €Oportunidad</span><span class="chip" data-m="ccita">€/Cita</span></div>
+    </div>
+    <div class="chartbox tall"><canvas id="chartCostWk"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
       <h4 id="evoTitle" style="margin:0">Evolución diaria · pincha una campaña o anuncio en las tablas de abajo ↓</h4>
       <div class="chips" id="evoMetric">
         <span class="chip on" data-m="citas">Citas</span><span class="chip" data-m="cr">CompleteReg</span><span class="chip" data-m="leads">Lead</span>
@@ -22301,6 +22308,7 @@ function buildFilters(){
   [fFrom,fTo].forEach(inp=>inp.addEventListener('change',()=>{F.from=fFrom.value||null;F.to=fTo.value||null;wc.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));renderAll();}));
   const sb=document.getElementById('fSearch');if(sb)sb.addEventListener('input',()=>{F.search=sb.value.trim().toLowerCase();renderAll();});
   const em=document.getElementById('evoMetric');if(em)em.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{em.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');evoMetric=ch.dataset.m;renderEvo();});
+  const cm=document.getElementById('costMetric');if(cm)cm.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{cm.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');costMetric=ch.dataset.m;renderCostWk();});
   if(DATA.meta&&DATA.meta.generado&&DATA.meta.generado!=='(seed)'){
     dataTag.textContent='● '+DATA.meta.rango+' · gen '+DATA.meta.generado;
     dataTag.style.color=C('--green');dataTag.style.borderColor=C('--green');dataTag.style.background=C('--green-dim');
@@ -22422,7 +22430,7 @@ function renderCampTable(){
   tCamp.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>{const c=tr.dataset.camp;sel=(sel&&sel.type==='camp'&&sel.camp===c)?null:{type:'camp',camp:c,label:(CAMPNAMES[c]||c)};renderAll();});
 }
 let sortKey='citas',sortDir='desc';
-let sel=null,evoMetric='citas';
+let sel=null,evoMetric='citas',costMetric='cpl';
 function renderAdsTable(){
   const a=filtered();
   let rows=[...groupBy(a,x=>x.camp+'|'+adName(x)).entries()].map(([k,r])=>{
@@ -22438,6 +22446,18 @@ function renderAdsTable(){
   tAds.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(k===sortKey)sortDir=sortDir==='desc'?'asc':'desc';else{sortKey=k;sortDir='desc';}renderAdsTable();});
   tAds.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>{const c=tr.dataset.camp,ad=tr.dataset.ad;sel=(sel&&sel.type==='ad'&&sel.camp===c&&sel.ad===ad)?null:{type:'ad',camp:c,ad,label:ad+' · '+c};renderAll();});
 }
+function renderCostWk(){
+  const a=filtered();
+  const wks=[...new Set(a.filter(x=>x.fecha).map(x=>weekLabel(x.fecha)))].sort((p,q)=>(+p.slice(1))-(+q.slice(1)));
+  const cita=costMetric==='ccita';
+  const line=(canal,col)=>{const byw=groupBy(a.filter(x=>x.fecha&&x.canal===canal),x=>weekLabel(x.fecha));
+    return {label:canal,borderColor:col,backgroundColor:'transparent',tension:.3,pointRadius:3,spanGaps:true,
+      data:wks.map(w=>{const r=byw.get(w)||[];const sp=sum(r,'spend'),den=cita?sum(r.filter(x=>x.citas!=null),'citas'):sum(r,'leads');return den?+(sp/den).toFixed(2):null;})};};
+  const ds=[];
+  if(a.some(x=>x.canal==='Meta')) ds.push(line('Meta',C('--blue')));
+  if(a.some(x=>x.canal==='Google')) ds.push(line('Google','#d98c5f'));
+  mk('chartCostWk',{type:'line',data:{labels:wks,datasets:ds},options:baseOpts({plugins:{legend:{display:true,labels:{color:C('--text-dim'),font:{family:'IBM Plex Mono',size:10}}}},scales:{x:{grid:{display:false},ticks:{color:C('--text-dim')}},y:{grid:{color:C('--border-soft')},title:{display:true,text:(cita?'€/Cita':'CPL / €Opp'),color:C('--text-faint'),font:{size:9}},ticks:{color:C('--text-dim'),callback:v=>'€'+v}}}})});
+}
 function renderEvo(){
   let base=filtered(),title='Todas las campañas';
   if(sel){base=base.filter(x=> sel.type==='camp'? x.camp===sel.camp : (x.camp===sel.camp&&adName(x)===sel.ad)); title=sel.label;}
@@ -22452,7 +22472,7 @@ function renderEvo(){
       yV:{position:'left',grid:{color:C('--border-soft')},title:{display:true,text:m[0],color:C('--text-faint'),font:{size:9}},ticks:{color:C('--text-dim')}},
       yC:{position:'right',grid:{display:false},title:{display:true,text:m[1]+' €',color:C('--text-faint'),font:{size:9}},ticks:{color:C('--gold'),callback:v=>'€'+v}}}})});
 }
-function renderAll(){renderKPIs();renderFunnel();renderCharts();renderCampTable();renderAdsTable();renderEvo();}
+function renderAll(){renderKPIs();renderFunnel();renderCharts();renderCampTable();renderAdsTable();renderEvo();renderCostWk();}
 buildFilters();
 renderAll();
 </script>
